@@ -1,0 +1,35 @@
+#Adding the name to the Anisble-Platbook
+- name: Playbok to configure K8S_Master
+#Name of the group of host to configure
+  hosts: K8S_Master
+  tasks: 
+          #configure the yum woth epel packages.
+          - name: configuring epel
+            yum_repository:
+                   name: epel
+                   file: epel
+                   description: Configure the epel repo
+                   baseurl: https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+                   gpgcheck: no
+            register: epel_status
+          - name: epel status
+            debug:
+                   msg: "Did Epel configuration failed => {{ epel_status.failed }}"
+          # configuring Yum for the Docker repo
+          - name: Configuring Docker yum Repoistory
+            when: epel_status.failed == false
+            yum_repository:
+                   name: docker-ce
+                   file: docker-ce
+                   description: configure the docker community editon repo
+                   baseurl: https://download.docker.com/linux/centos/7/x86_64/stable/
+                   gpgcheck: no
+            register: docker_ce_status
+            
+          - name: Docker-ce_status
+            debug: 
+                   msg: "Did docker configuration failed => {{ docker_ce_status }}"
+          
+          #
+                   
+          
