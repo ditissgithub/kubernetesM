@@ -53,7 +53,7 @@
             
           - name: kubernetes Repo Status
             debug:
-                   msg: "Did Kubernetes Repo configuration Failed => {{ kubernetes_status.failed }}
+                   msg: "Did Kubernetes Repo configuration Failed => {{ kubernetes_status.failed }}"
                    
 # Installing Docker 
           - name: Download Docker-CE 
