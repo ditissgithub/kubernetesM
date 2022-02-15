@@ -26,10 +26,240 @@
                    gpgcheck: no
             register: docker_ce_status
             
+     
           - name: Docker-ce_status
             debug: 
                    msg: "Did docker configuration failed => {{ docker_ce_status }}"
           
-          #
-                   
+          # Configuring Yum for the Kubernetes Repository
           
+          - name: configuring kubernetes Yum Repository
+            yum_repository:
+                   name: kubernetes
+                   file: kubernetes
+                   description: configuring the kubernetes setup
+                   baseurl: https://packages.cloud.google.com/yum/repos/kubernetes-el7-$basearch
+                   gpgcheck: yes
+                   enabled: 1
+                   repo_gpgcheck: 1
+                   exclude:
+                       - kubelet
+                       - kubeadm
+                       - kubectl
+                   gpgkey: https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+                   
+            register: kubernetes_status
+            
+            
+          - name: kubernetes Repo Status
+            debug:
+                   msg: "Did Kubernetes Repo configuration Failed => {{ kubernetes_status.failed }}
+                   
+# Installing Docker 
+          - name: Download Docker-CE 
+            when: docker_ce_status.failed == false
+            command:
+              cmd: dnf install -y docker-ce --nobest
+            register: docker_install_status
+
+          - name: Docker Installation Status
+            debug:
+                    msg: "Docker Installation Return Code => {{ docker_install_status.rc }}"                   
+
+# Installing Kubernetes 
+          - name: Download Kubernetes
+            when: kubernetes_status.failed == false
+            package:
+              name:
+                - "kubeadm"
+                - "kubelet"
+                - "kubectl"
+              state: present
+              disable_excludes: "kubernetes"
+            register: k8_install_status
+
+          - name: Kubernetes Installation Status
+            debug:
+                    msg: "Kubernetes Installation Return Code => {{ k8_install_status.rc }}"                   
+
+# Stopping firewall daemon for Docker Container to run smoothly! 
+          - name: Disabling Firewall Daemon
+            service:
+                    name: firewalld
+                    state: stopped
+            register: firewalld_status
+
+          - name: Firewall Daemon Status
+            debug:
+                    msg: "Firewall Daemon Failed State => {{ firewalld_status.state}}"
+
+# Disabling SELINUX
+          - name: Disabling SELINUX
+            when: firewalld_status.failed == false
+            selinux:
+              state: permissive
+              policy: targeted
+            register: SEL_Disable_status
+
+          - name: SeLinux Disable Status
+            debug:
+                    msg: "SeLinux Disable Failed Status => {{ SEL_Disable_status.failed }}"
+                    
+                    
+ # Starting the Docker Services
+          - name: Start Docker Services
+            when: docker_install_status.rc == 0
+            service:
+                    name: "docker"
+                    state: started
+                    enabled: yes
+            register: docker_service_status
+
+          - name: Docker Service Status
+            debug:
+                    msg: "Docker Service Status => {{ docker_service_status.state}}"
+                    
+# Installing Python3 in the Machine for Pip3 and Docker-py Module
+          - name: Installing Python3 and Pip3
+            package:
+              name: python36
+              state: present
+            register: p36_status
+
+          - name: Python3 & Pip3 Status
+            debug:
+                    msg: "Python3 & Pip3 Download Failed Status => {{ p36_status.failed}}"        
+                    
+ # Downloading Docker-py Module for the Docker Pull to run on the managed node!
+          - name: Download docker-py Module
+            when: docker_service_status.state == "started"
+            pip:
+                    name: "docker-py"
+                    state: present
+            register: docker_py_status
+
+          - name: Docker-py Status
+            debug:
+                    msg: "Docker Py Download Failed Status => {{ docker_py_status.failed}}"
+                    
+     
+# Changing the Docker Cgroup to systemd from cgroupfs which is supported by Kubernetes!
+          - name: Changing Docker Cgroup
+            when: docker_py_status.failed == False
+            blockinfile:
+              path: "/etc/docker/daemon.json"
+              create: yes
+              marker: ""
+              block:
+                "{\n
+                  \"exec-opts\": [\"native.cgroupdriver=systemd\"]\n
+                }"
+            register: docker_CGroup_status
+
+          - name: Docker-py Status
+            debug:
+                    msg: "Docker Cgroup Replacement Failed Status => {{ docker_CGroup_status.failed}}"
+                    
+                    
+     # Disabling Swap for Kubectl Efficient Working!
+          - name: Disabling Swap
+            when: docker_py_status.failed == False
+            replace:
+              dest: "/etc/fstab"
+              regexp: "^/dev/mapper/rhel-swap"
+              replace: "#/dev/mapper/rhel-swap"
+            register: Swap_Replace_status
+
+          - name: Swap_Replace Status
+            debug:
+                    msg: "Swap Replace Failed Status => {{ Swap_Replace_status.failed }}"                    
+
+# Adding Ip of hosts in the /etc/hosts File
+          - name: Adding information about all the hosts
+            blockinfile:
+              dest: "/etc/hosts"
+              
+              # Example IP's
+              block: " 10.16.1.5     master \n
+                       10.16.1.7     worker1 \n
+                       10.16.1.3     worker2  "
+              marker: ""
+              
+            register: Swap_Replace_status
+
+          - name: Swap_Replace Status
+            debug:
+                    msg: "Swap Replace Failed Status => {{ Swap_Replace_status.failed }}"
+                    
+                    
+# Installing the IpRoute-TC package
+          - name: Installing IpRoute-TC
+            package:
+              name: "iproute-tc"
+              state: present
+            register: IPRouteTC_status
+
+          - name: IpRoute-TC Installation Status
+            debug:
+                    msg: "IPRoute-TC Installtion Failed Status => {{ IPRouteTC_status.failed }}"
+                    
+ # Reloading Systemd driver
+          - name: Reloading systemd driver
+            systemd:
+              daemon_reload: yes
+            register: SD_status
+
+          - name: Systemd Reload Status
+            debug:
+                    msg: "SystemD Reload Failed Status => {{ IPRouteTC_status.failed }}"      
+                    
+                    
+# Restarting docker services
+          - name: Restarting Docker services
+            service:
+              name: "docker"
+              state: restarted
+            register: DSR_Status
+
+          - name: Docker restart Reload Status
+            debug:
+                    msg: "DSR Reload Failed Status => {{ IPRouteTC_status.failed }}"
+                    
+  
+ # Starting & Enabling the Kubelet Service
+          - name: Starting & Enabling Kubelet
+            service:
+              name: "kubelet"
+              state: started
+              enabled: yes
+            register: Kubelet_status
+
+          - name: Kubelete Service Status
+            debug:
+                    msg: "Kubelet service failed => {{ Kubelet_status.failed }}"  
+  
+  
+# Disabling swap using command
+          - name: Disabling Swap
+            shell:
+              cmd: swapoff -a
+            register: swapoff_status
+
+          - name: Swappoff disable Status
+            debug:
+                    msg: "Swapoff Disable failed => {{ swapoff_status.failed }}"  
+                    
+                    
+ # Chaning the name of the Host machine to Master
+          - name: Chaning the name of the Host machine to Master
+            shell:
+              cmd: 
+              - hostnamectl set-hostname master
+              - exec bash
+            register: hostname_status
+
+          - name: Hostname change Status
+            debug:
+                    msg: "Hostname change failed => {{ hostname_status.failed }}"                     
+  
+                    
