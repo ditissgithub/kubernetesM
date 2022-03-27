@@ -22,7 +22,7 @@
                    name: docker-ce
                    file: docker-ce
                    description: configure the docker community editon repo
-                   baseurl: https://download.docker.com/linux/centos/7/x86_64/stable/
+                   baseurl: https://download.docker.com/linux/centos/docker-ce.repo
                    gpgcheck: no
             register: docker_ce_status
             
@@ -38,7 +38,7 @@
                    name: kubernetes
                    file: kubernetes
                    description: configuring the kubernetes setup
-                   baseurl: https://packages.cloud.google.com/yum/repos/kubernetes-el7-$basearch
+                   baseurl: https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
                    gpgcheck: yes
                    enabled: 1
                    repo_gpgcheck: 1
